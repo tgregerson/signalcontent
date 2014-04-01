@@ -7,8 +7,8 @@
  *  A wrapper for the queue data structure that uses four-value logic.
  */
 
-#ifndef QUEUE_FV_H_
-#define QUEUE_FV_H_
+#ifndef SIGNAL_CONTENT_BASE_QUEUE_FV_H_
+#define SIGNAL_CONTENT_BASE_QUEUE_FV_H_
 
 #include <queue>
 
@@ -20,4 +20,4 @@ typedef std::queue<FourValueLogic> queue_fv;
 }  // namespace base
 }  // namespace signal_content
 
-#endif /* QUEUE_FV_H_ */
+#endif /* SIGNAL_CONTENT_BASE_QUEUE_FV_H_ */

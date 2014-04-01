@@ -1,5 +1,5 @@
-#ifndef FOUR_VALUE_LOGIC_H_
-#define FOUR_VALUE_LOGIC_H_
+#ifndef SIGNAL_CONTENT_BASE_FOUR_VALUE_LOGIC_H_
+#define SIGNAL_CONTENT_BASE_FOUR_VALUE_LOGIC_H_
 
 namespace signal_content {
 namespace base {
@@ -12,4 +12,4 @@ namespace base {
 }  // namespace base
 }  // namespace four_value_logic
 
-#endif /* FOUR_VALUE_LOGIC_H_ */
+#endif /* SIGNAL_CONTENT_BASE_FOUR_VALUE_LOGIC_H_ */

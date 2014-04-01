@@ -5,8 +5,8 @@
  *      Author: gregerso
  */
 
-#ifndef PARSER_INTERFACE_H_
-#define PARSER_INTERFACE_H_
+#ifndef SIGNAL_CONTENT_PARSER_PARSER_INTERFACE_H_
+#define SIGNAL_CONTENT_PARSER_PARSER_INTERFACE_H_
 
 #include <string>
 
@@ -29,4 +29,4 @@ class ParserInterface {
 }  // parser
 }  // signal_content
 
-#endif /* PARSER_INTERFACE_H_ */
+#endif /* SIGNAL_CONTENT_PARSER_PARSER_INTERFACE_H_ */
