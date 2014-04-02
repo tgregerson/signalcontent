@@ -16,7 +16,7 @@
 
 namespace signal_content {
 namespace base {
-typedef std::queue<FourValueLogic> queue_fv;
+typedef std::queue<FourValueLogic> QueueFv;
 }  // namespace base
 }  // namespace signal_content
 
