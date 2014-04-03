@@ -10,13 +10,14 @@
 #ifndef SIGNAL_CONTENT_BASE_QUEUE_FV_H_
 #define SIGNAL_CONTENT_BASE_QUEUE_FV_H_
 
+#include <list>
 #include <queue>
 
 #include "four_value_logic.h"
 
 namespace signal_content {
 namespace base {
-typedef std::queue<FourValueLogic> QueueFv;
+typedef std::queue<FourValueLogic, std::list<FourValueLogic>> QueueFv;
 }  // namespace base
 }  // namespace signal_content
 
