@@ -62,19 +62,19 @@ class BlackHoleLogger {
 class MacroLikeLogger {
  public:
   MacroLikeLogger() {}
-  MacroLikeLogger(bool enabled, const std::ostream& ostr)
+  MacroLikeLogger(bool enabled, std::ostream* ostr)
       : enabled_(enabled), ostr_(ostr) {}
 
   MacroLikeLogger& operator << (const char* cstr) {
-    if (enabled_) ostr_ << cstr;
+    if (enabled_) *ostr_ << cstr;
     return *this;
   }
   MacroLikeLogger& operator << (const std::string& str) {
-    if (enabled_) ostr_ << str;
+    if (enabled_) *ostr_ << str;
     return *this;
   }
   virtual ~MacroLikeLogger() {
-    if (enabled_) ostr_ << std::endl;
+    if (enabled_) *ostr_ << std::endl;
   }
 
  protected:
@@ -85,33 +85,33 @@ class MacroLikeLogger {
     enabled_ = enabled;
   }
   std::ostream& ostr() {
-    return ostr_;
+    return *ostr_;
   }
-  void set_stream(const std::ostream& ostr) {
+  void set_stream(std::ostream* ostr) {
     ostr_ = ostr;
   }
 
  private:
   bool enabled_{true};
-  std::ostream ostr_{std::cout};
+  std::ostream* ostr_{&std::cout};
 };
 
 class MacroLikeDebugLogger : public MacroLikeLogger {
  public:
   MacroLikeDebugLogger(int lev)
-      : MacroLikeLogger((lev >= ENV_DEBUG_LEVEL), std::cout) {};
+      : MacroLikeLogger((lev >= ENV_DEBUG_LEVEL), &std::cout) {};
 };
 
 class MacroLikeVerboseLogger : public MacroLikeLogger {
  public:
   MacroLikeVerboseLogger(int lev)
-      : MacroLikeLogger((lev >= ENV_VERBOSITY_LEVEL), std::cout) {};
+      : MacroLikeLogger((lev >= ENV_VERBOSITY_LEVEL), &std::cout) {};
 };
 
 class MacroLikeCheckLogger : public MacroLikeLogger {
  public:
   MacroLikeCheckLogger(bool passed)
-      : MacroLikeLogger(!passed, std::cerr) {}
+      : MacroLikeLogger(!passed, &std::cerr) {}
   virtual ~MacroLikeCheckLogger() {
     if (enabled()) {
       exit(1);
