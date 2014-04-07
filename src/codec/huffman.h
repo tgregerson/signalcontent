@@ -28,10 +28,17 @@ class HuffmanCodec {
   HuffmanCodec(const base::VFrameDeque& frame_deque,
                size_t frame_size,
                size_t symbol_bits);
+
+  std::vector<bool> Encode(const base::VFrameDeque& bits);
+  std::vector<int> Decode(const std::vector<bool>& bits);
+
  private:
-  // Encodes a four-value symbol into binary.
-  int FourValueSymbolToInt(
+  // Represent a series of four-value bits as a multi-bit symbol.
+  int FourValueBitsToSymbol(
       const base::FourValueLogic* fv_array, size_t num_bits) const;
+
+  // Extract integer symbols for an entire frame.
+  std::vector<int> FrameToSymbols(const base::VFrameFv& frame);
 
   void BuildCodeTableRecursive(
       const HuffmanNode* node,
@@ -39,6 +46,7 @@ class HuffmanCodec {
       std::unordered_map<int, std::vector<bool>>* table);
 
   size_t frame_size_;
+  size_t symbol_bits_;
   std::unordered_map<int, std::vector<bool>> symbol_to_codeword_;
   HuffmanNode* code_tree_root_{nullptr};
 };

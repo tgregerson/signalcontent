@@ -9,28 +9,32 @@ namespace codec {
 
 #include "huffman.h"
 
+#include "../base/macros.h"
+
+using namespace std;
+
 namespace signal_content {
+using base::FourValueLogic;
+using base::VFrameDeque;
+using base::VFrameFv;
 namespace codec {
 
 HuffmanCodec::HuffmanCodec(
-    const base::VFrameDeque& frame_deque, size_t frame_size,
-    size_t symbol_bits) : frame_size_(frame_size) {
+    const VFrameDeque& frame_deque, size_t frame_size,
+    size_t symbol_bits) : frame_size_(frame_size), symbol_bits_(symbol_bits) {
   if (symbol_bits > 32) {
-    throw std::runtime_error("Symbol size cannot exceed 32 bits.");
+    throw runtime_error("Symbol size cannot exceed 32 bits.");
   }
 
   // Build frequency table.
-  std::unordered_map<int, size_t> symbol_to_freq;
+  unordered_map<int, size_t> symbol_to_freq;
   for (size_t frame_num = 0; frame_num < frame_deque.size(); ++frame_num) {
-    const base::VFrameFv& frame = frame_deque.at(frame_num);
-    for (size_t bit = 0; bit < frame_size_; bit += symbol_bits) {
-      size_t bits_left_in_frame = frame_size_ - bit;
-      int encoded = (bits_left_in_frame < symbol_bits) ?
-          FourValueSymbolToInt(&frame[bit], bits_left_in_frame) :
-          FourValueSymbolToInt(&frame[bit], symbol_bits);
-      auto it = symbol_to_freq.find(encoded);
+    const VFrameFv& frame = frame_deque.at(frame_num);
+    vector<int> symbols = FrameToSymbols(frame);
+    for (int symbol : symbols) {
+      auto it = symbol_to_freq.find(symbol);
       if (it == symbol_to_freq.end()) {
-        symbol_to_freq.insert(std::make_pair(encoded, 1));
+        symbol_to_freq.insert(std::make_pair(symbol, 1));
       } else {
         it->second = it->second + 1;
       }
@@ -67,17 +71,58 @@ HuffmanCodec::HuffmanCodec(
   BuildCodeTableRecursive(code_tree_root_, &empty, &symbol_to_codeword_);
 }
 
-int HuffmanCodec::FourValueSymbolToInt(
-    const base::FourValueLogic* fv_array, size_t num_bits) const {
+vector<bool> HuffmanCodec::Encode(const VFrameDeque& frame_deque) {
+  vector<bool> encoded;
+  for (size_t frame_num = 0; frame_num < frame_deque.size(); ++frame_num) {
+    const VFrameFv& frame = frame_deque.at(frame_num);
+    CHECK_EQ(frame_size_, frame.size()) << "Frame size mismatch: "
+                                        << frame.size() << " " << frame_size_;
+    vector<int> symbols = FrameToSymbols(frame);
+    for (int symbol : symbols) {
+      const vector<bool>& codeword = symbol_to_codeword_.at(symbol);
+      encoded.insert(encoded.end(), codeword.begin(), codeword.end());
+    }
+  }
+  return encoded;
+}
+
+vector<int> HuffmanCodec::Decode(const vector<bool>& bits) {
+  vector<int> decoded;
+  HuffmanNode* current_node = CHECK_NOTNULL(code_tree_root_);
+  for (bool bit : bits) {
+    current_node = bit ? current_node->right : current_node->left;
+    if (current_node->is_leaf_node) {
+      decoded.push_back(current_node->symbol);
+      current_node = code_tree_root_;
+    }
+  }
+  CHECK_EQ(code_tree_root_, current_node) << "Bits did not end on leaf.";
+  return decoded;
+}
+
+int HuffmanCodec::FourValueBitsToSymbol(
+    const FourValueLogic* fv_array, size_t num_bits) const {
   int encoded = 0;
   for (size_t bit = 0; bit < num_bits; ++bit) {
     encoded = encoded << 1;
     // Treat X, Z as zeroes.
-    if (fv_array[bit] == base::FourValueLogic::ONE) {
+    if (fv_array[bit] == FourValueLogic::ONE) {
       encoded |= 1;
     }
   }
   return encoded;
+}
+
+vector<int> HuffmanCodec::FrameToSymbols(const base::VFrameFv& frame) {
+  vector<int> symbols;
+  for (size_t bit = 0; bit < frame_size_; bit += symbol_bits_) {
+    size_t bits_left_in_frame = frame_size_ - bit;
+    symbols.push_back(
+        (bits_left_in_frame < symbol_bits_) ?
+        FourValueBitsToSymbol(&(frame[bit]), bits_left_in_frame) :
+        FourValueBitsToSymbol(&(frame[bit]), symbol_bits_));
+  }
+  return symbols;
 }
 
 void HuffmanCodec::BuildCodeTableRecursive(
