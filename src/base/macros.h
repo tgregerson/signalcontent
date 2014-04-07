@@ -36,8 +36,26 @@ template<typename T> inline T* CHECK_NOTNULL(T* ptr) { assert(ptr != nullptr); r
 
 // Macros for stream-like logging and assertions.
 #define LOG MacroLikeLogger()
-#define CHECK(expr) MacroLikeCheckLogger(expr) << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED - " << #expr << std::endl
-#define CHECK_EQ(a, b) MacroLikeBinaryCheckLogger<decltype(a)>([] (const decltype(a)& arg1, const decltype(b)& arg2) { return arg1 == arg2; }) << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED" << std::endl
+#define CHECK(expr) MacroLikeCheckLogger(expr) \
+  << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED - " << #expr << "\n"
+#define CHECK_EQ(a, b) MacroLikeBinaryCheckLogger<decltype(a)>( \
+    [] (const decltype(a)& arg1, const decltype(b)& arg2) { return arg1 == arg2; }, a, b) \
+    << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED: CHECK_EQ(" << #a << ", " << #b << ")\n"
+#define CHECK_NE(a, b) MacroLikeBinaryCheckLogger<decltype(a)>( \
+    [] (const decltype(a)& arg1, const decltype(b)& arg2) { return arg1 != arg2; }, a, b) \
+    << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED: CHECK_NE(" << #a << ", " << #b << ")\n"
+#define CHECK_LT(a, b) MacroLikeBinaryCheckLogger<decltype(a)>( \
+    [] (const decltype(a)& arg1, const decltype(b)& arg2) { return arg1 < arg2; }, a, b) \
+    << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED: CHECK_LT(" << #a << ", " << #b << ")\n"
+#define CHECK_LE(a, b) MacroLikeBinaryCheckLogger<decltype(a)>( \
+    [] (const decltype(a)& arg1, const decltype(b)& arg2) { return arg1 <= arg2; }, a, b) \
+    << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED: CHECK_LE(" << #a << ", " << #b << ")\n"
+#define CHECK_GT(a, b) MacroLikeBinaryCheckLogger<decltype(a)>( \
+    [] (const decltype(a)& arg1, const decltype(b)& arg2) { return arg1 > arg2; }, a, b) \
+    << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED: CHECK_GT(" << #a << ", " << #b << ")\n"
+#define CHECK_GE(a, b) MacroLikeBinaryCheckLogger<decltype(a)>( \
+    [] (const decltype(a)& arg1, const decltype(b)& arg2) { return arg1 >= arg2; }, a, b) \
+    << CONTEXT_AS_STREAM_ARG << " - CHECK FAILED: CHECK_GE(" << #a << ", " << #b << ")\n"
 
 #if ENV_DEBUG_ENABLED
 #define DCHECK(expr) CHECK(expr)
@@ -57,6 +75,9 @@ class BlackHoleLogger {
   BlackHoleLogger& operator << (const std::string& str) {
     return *this;
   }
+  BlackHoleLogger& operator << (int val) {
+    return *this;
+  }
 };
 
 class MacroLikeLogger {
@@ -71,6 +92,10 @@ class MacroLikeLogger {
   }
   MacroLikeLogger& operator << (const std::string& str) {
     if (enabled_) *ostr_ << str;
+    return *this;
+  }
+  MacroLikeLogger& operator << (int val) {
+    if (enabled_) *ostr_ << val;
     return *this;
   }
   virtual ~MacroLikeLogger() {
