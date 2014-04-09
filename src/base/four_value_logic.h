@@ -9,6 +9,10 @@ namespace base {
     X = 2,
     Z = 3
   };
+
+  FourValueLogic FourValueLogicFromBool(bool bit) {
+    return bit ? FourValueLogic::ONE : FourValueLogic::ZERO;
+  }
 }  // namespace base
 }  // namespace four_value_logic
 
