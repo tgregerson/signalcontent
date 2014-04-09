@@ -18,6 +18,19 @@
 namespace signal_content {
 namespace base {
 typedef std::queue<FourValueLogic, std::list<FourValueLogic>> QueueFv;
+
+// Convert a specified number of bits for a data type to a queue of four value
+// logic. The bits taken are the least significant bits.
+template <typename T, size_t NUM_BITS>
+QueueFv QueueFvFromBits(T bits) {
+  QueueFv q;
+  for (int i = 0; i < NUM_BITS; ++i) {
+    bool bit = bits & 0x1;
+    q.push(FourValueLogicFromBool(bit));
+    bits = bits >> 1;
+  }
+  return q;
+}
 }  // namespace base
 }  // namespace signal_content
 
