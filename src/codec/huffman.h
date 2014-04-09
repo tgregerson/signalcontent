@@ -28,6 +28,7 @@ class HuffmanCodec {
   HuffmanCodec(const base::VFrameDeque& frame_deque,
                size_t frame_size,
                size_t symbol_bits);
+  ~HuffmanCodec();
 
   std::vector<bool> Encode(const base::VFrameDeque& bits);
   std::vector<int> Decode(const std::vector<bool>& bits);
@@ -56,6 +57,15 @@ struct HuffmanNode {
               HuffmanNode* p)
       : is_leaf_node(leaf), frequency(freq), symbol(sym), left(l), right(r),
         parent(p) {}
+  ~HuffmanNode() {
+    if (left != nullptr) {
+      delete left;
+    }
+    if (right != nullptr) {
+      delete right;
+    }
+  }
+
   bool is_leaf_node{true};
   int frequency{0};
   int symbol{0};

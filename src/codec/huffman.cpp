@@ -41,7 +41,8 @@ HuffmanCodec::HuffmanCodec(
     }
   }
 
-  // Build the decoding tree.
+  // Build the decoding tree. Start by creating all leaf nodes, then build the
+  // tree from the bottom up.
   std::priority_queue<HuffmanNode*, std::vector<HuffmanNode*>,
                       HuffmanNodePointerGreater> freq_sorted_nodes;
   for (std::pair<int, size_t> p : symbol_to_freq) {
@@ -50,6 +51,7 @@ HuffmanCodec::HuffmanCodec(
         new HuffmanNode(true, p.second, p.first, nullptr, nullptr, nullptr));
   }
 
+  // Build parent nodes from leaves.
   while (freq_sorted_nodes.size() > 1) {
     HuffmanNode* n1 = freq_sorted_nodes.top();
     freq_sorted_nodes.pop();
@@ -63,12 +65,20 @@ HuffmanCodec::HuffmanCodec(
   }
   assert(freq_sorted_nodes.size() == 1);
 
+  // Ownership of all nodes in the tree is transferred to the root. Nodes will
+  // be deleted when root is destroyed.
   code_tree_root_ = freq_sorted_nodes.top();
   freq_sorted_nodes.pop();
 
   // Build the code table.
   std::vector<bool> empty;
   BuildCodeTableRecursive(code_tree_root_, &empty, &symbol_to_codeword_);
+}
+
+HuffmanCodec::~HuffmanCodec() {
+  if (code_tree_root_ != nullptr) {
+    delete code_tree_root_;
+  }
 }
 
 vector<bool> HuffmanCodec::Encode(const VFrameDeque& frame_deque) {
