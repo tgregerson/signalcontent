@@ -2,7 +2,7 @@ OBJDIR = build_files
 
 VPATH = src/base:src/codec:src/parser
 
-CXXFLAGS =	-O2 -g -Wall -fmessage-length=0 -std=c++0x
+CXXFLAGS = -O2 -g -Wall -fmessage-length=0 -std=c++0x
 CXX = clang++
 
 BASE_O = $(addprefix $(OBJDIR)/,huffman.o)
@@ -11,8 +11,9 @@ TARGET = signal_content_main
 
 $(TARGET):	$(OBJS)
 	$(CXX) -o $(TARGET) $(OBJS) $(LIBS)
+	
+all: base
 
-all:	$(TARGET)
 base: $(BASE_O)
 
 clean:
