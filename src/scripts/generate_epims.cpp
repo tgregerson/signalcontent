@@ -1,3 +1,5 @@
+#include <cassert>
+
 #include <iostream>
 #include <random>
 #include <set>
@@ -10,6 +12,8 @@ struct Parameters {
   int shift_bits = 9;
   double ratio_threshold = 0.5;
   int ecal_threshold = 50;
+  set<int> ecal_vetoes;
+  set<int> hcal_vetoes;
 };
 
 void print_epim(ostream& os, const Parameters& parameters, const string& unique_name_suffix) {
@@ -114,9 +118,11 @@ void print_epim_energy(ostream& os, const Parameters& parameters, const string& 
   os << "endmodule" << endl;
 }
 
-void print_epim_veto(ostream& os, const Parameters& parameters, const string& unique_name_suffix,
-                     const set<int>& ecal_vetoes, const set<int>& hcal_vetoes) {
+void print_epim_veto(ostream& os, const Parameters& parameters,
+                     const string& unique_name_suffix) {
   int cal_bits = parameters.cal_bits;
+  const set<int>& ecal_vetoes = parameters.ecal_vetoes;
+  const set<int>& hcal_vetoes = parameters.hcal_vetoes;
 
   os << "module epim_veto" << unique_name_suffix << "(ecal, hcal, energy_pass);" << endl;
   os << "  parameter CAL_BITS = " << cal_bits << ";" << endl;
@@ -143,6 +149,31 @@ void print_epim_veto(ostream& os, const Parameters& parameters, const string& un
   os << "endmodule" << endl;
 }
 
+vector<bool> get_memory_image(const Parameters& parameters) {
+  vector<bool> memory;
+  const int num_addr_bits = parameters.cal_bits * 2;
+  assert (num_addr_bits > 0);
+  const int num_contents_bits = 1 << (num_addr_bits - 1);
+
+  const int addr_mask = (1 << (num_addr_bits) - 1);
+  const int ecal_mask = (1 << (parameters.cal_bits)) - 1;
+  const int hcal_mask = addr_mask & ~ecal_mask;
+
+  memory.reserve(num_contents_bits);
+
+  for (int i = 0; i < num_contents_bits; ++i) {
+    int ecal = i & ecal_mask;
+    int hcal = i & hcal_mask;
+    double ratio = ((double)ecal) / ((double)ecal + (double)hcal);
+    bool ratio_pass = ratio > parameters.ratio_threshold;
+    bool veto = (parameters.ecal_vetoes.find(ecal) != parameters.ecal_vetoes.end()) |
+                (parameters.hcal_vetoes.find(hcal) != parameters.hcal_vetoes.end());
+    memory[num_contents_bits] =
+        ((ecal > parameters.ecal_threshold) | ratio_pass) & ~veto;
+  }
+  return memory;
+}
+
 int main(int argc, char* argv[]) {
 
   ostream& os = cout;
@@ -157,19 +188,17 @@ int main(int argc, char* argv[]) {
 
   // We continue using previous veto values, so successive sets of vetoes are
   // supersets of the previous ones.
-  set<int> ecal_vetoes;
-  set<int> hcal_vetoes;
   default_random_engine generator(initial_seed);
   uniform_int_distribution<int> distribution(
       veto_energy_min, veto_energy_max);
 
   for (int num_vetoes = start_num_vetoes; num_vetoes < end_num_vetoes;
        num_vetoes += increment_vetoes) {
-    while (ecal_vetoes.size() < num_vetoes) {
-      ecal_vetoes.insert(distribution(generator));
+    while (parameters.ecal_vetoes.size() < num_vetoes) {
+      parameters.ecal_vetoes.insert(distribution(generator));
     }
-    while (hcal_vetoes.size() < num_vetoes) {
-      hcal_vetoes.insert(distribution(generator));
+    while (parameters.hcal_vetoes.size() < num_vetoes) {
+      parameters.hcal_vetoes.insert(distribution(generator));
     }
 
     stringstream ss;
@@ -181,7 +210,7 @@ int main(int argc, char* argv[]) {
     print_epim_energy(os, parameters, ss.str());
     os << endl;
 
-    print_epim_veto(os, parameters, ss.str(), ecal_vetoes, hcal_vetoes);
+    print_epim_veto(os, parameters, ss.str());
     os << endl;
   }
 
