@@ -1,5 +1,7 @@
 #include <iostream>
+#include <random>
 #include <set>
+#include <sstream>
 
 using namespace std;
 
@@ -23,9 +25,9 @@ void print_epim(ostream& os, const Parameters& parameters, const string& unique_
 
   os << "module epim" << unique_name_suffix << "(ecal, hcal, egamma);" << endl;
   os << "  parameter CAL_BITS = " << cal_bits << ";" << endl;
-  os << "  parameter SCALED_RATIO_THRESHOLD = CAL_BITS'd" << scaled_ratio_threshold << ";" << endl;
+  os << "  parameter SCALED_RATIO_THRESHOLD = " << cal_bits << "'d" << scaled_ratio_threshold << ";" << endl;
   os << "  parameter RATIO_THRESHOLD_SHIFT_BITS = CAL_BITS - 1;" << endl;
-  os << "  parameter ECAL_THRESHOLD = CAL_BITS'd" << ecal_threshold << ";" << endl;
+  os << "  parameter ECAL_THRESHOLD = " << cal_bits << "'d" << ecal_threshold << ";" << endl;
   os << "  input [CAL_BITS-1:0] ecal, hcal;" << endl;
   os << "  output egamma;" << endl;
   os << endl;
@@ -81,7 +83,7 @@ void print_epim_ratio(ostream& os, const Parameters& parameters, const string& u
 
   os << "module epim_ratio" << unique_name_suffix << "(ecal, hcal, ratio_pass);" << endl;
   os << "  parameter CAL_BITS = " << cal_bits << ";" << endl;
-  os << "  parameter SCALED_RATIO_THRESHOLD = CAL_BITS'd" << scaled_ratio_threshold << ";" << endl;
+  os << "  parameter SCALED_RATIO_THRESHOLD = " << cal_bits <<"'d" << scaled_ratio_threshold << ";" << endl;
   os << "  parameter RATIO_THRESHOLD_SHIFT_BITS = CAL_BITS - 1;" << endl;
   os << "  input [CAL_BITS-1:0] ecal, hcal;" << endl;
   os << "  output reg ratio_pass;" << endl;
@@ -102,7 +104,7 @@ void print_epim_energy(ostream& os, const Parameters& parameters, const string& 
 
   os << "module epim_energy" << unique_name_suffix << "(ecal, hcal, energy_pass);" << endl;
   os << "  parameter CAL_BITS = " << cal_bits << ";" << endl;
-  os << "  parameter ECAL_THRESHOLD = CAL_BITS'd" << ecal_threshold << ";" << endl;
+  os << "  parameter ECAL_THRESHOLD = " << cal_bits << "'d" << ecal_threshold << ";" << endl;
   os << "  input [CAL_BITS-1:0] ecal, hcal;" << endl;
   os << "  output reg energy_pass;" << endl;
   os << endl;
@@ -146,21 +148,42 @@ int main(int argc, char* argv[]) {
   ostream& os = cout;
   Parameters parameters;
 
-  print_epim(os, parameters, "");
-  os << endl;
-  print_epim_ratio(os, parameters, "");
-  os << endl;
-  print_epim_energy(os, parameters, "");
-  os << endl;
+  const int initial_seed = 0;
+  const int start_num_vetoes = 0;
+  const int increment_vetoes = 10;
+  const int end_num_vetoes = 200;
+  const int veto_energy_min = 0;
+  const int veto_energy_max = 1023;
 
-  set<int> ecal_vetoes = {
-    20, 50, 120
-  };
-  set<int> hcal_vetoes = {
-    30, 60, 90
-  };
-  print_epim_veto(os, parameters, "", ecal_vetoes, hcal_vetoes);
-  os << endl;
+  // We continue using previous veto values, so successive sets of vetoes are
+  // supersets of the previous ones.
+  set<int> ecal_vetoes;
+  set<int> hcal_vetoes;
+  default_random_engine generator(initial_seed);
+  uniform_int_distribution<int> distribution(
+      veto_energy_min, veto_energy_max);
+
+  for (int num_vetoes = start_num_vetoes; num_vetoes < end_num_vetoes;
+       num_vetoes += increment_vetoes) {
+    while (ecal_vetoes.size() < num_vetoes) {
+      ecal_vetoes.insert(distribution(generator));
+    }
+    while (hcal_vetoes.size() < num_vetoes) {
+      hcal_vetoes.insert(distribution(generator));
+    }
+
+    stringstream ss;
+    ss << "_" << num_vetoes;
+    print_epim(os, parameters, ss.str());
+    os << endl;
+    print_epim_ratio(os, parameters, ss.str());
+    os << endl;
+    print_epim_energy(os, parameters, ss.str());
+    os << endl;
+
+    print_epim_veto(os, parameters, ss.str(), ecal_vetoes, hcal_vetoes);
+    os << endl;
+  }
 
   return 0;
 }
