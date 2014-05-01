@@ -185,7 +185,7 @@ void compress_memory_image(QueueFv& image) {
   VFrameDeque memory_vfd = ConvertToFrameDeque(std::move(dead_soon), 64);
   HuffmanCodec codec(memory_vfd, 64, 32);
   vector<bool> encoded = codec.Encode(memory_vfd);
-  cout << "Encoded bits to size: " << encoded.size();
+  cout << "Encoded bits to size: " << encoded.size() << endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -226,6 +226,9 @@ int main(int argc, char* argv[]) {
 
     print_epim_veto(os, parameters, ss.str());
     os << endl;
+
+    QueueFv memory = get_memory_image(parameters);
+    compress_memory_image(memory);
   }
 
   return 0;
