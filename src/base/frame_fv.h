@@ -71,7 +71,7 @@ FrameQueue<FRAME_SIZE> ConvertToFrameQueue(QueueFv&& q) {
   return frame_queue;
 }
 
-VFrameQueue ConvertToFrameQueue(QueueFv&& q, int frame_size) {
+inline VFrameQueue ConvertToFrameQueue(QueueFv&& q, int frame_size) {
   VFrameQueue frame_queue;
   if (q.size() % frame_size != 0) {
     throw std::runtime_error("Queue is not a multiple of frame size.");
@@ -106,7 +106,7 @@ FrameDeque<FRAME_SIZE> ConvertToFrameDeque(QueueFv&& q) {
   return frame_deque;
 }
 
-VFrameDeque ConvertToFrameDeque(QueueFv&& q, int frame_size) {
+inline VFrameDeque ConvertToFrameDeque(QueueFv&& q, int frame_size) {
   VFrameDeque frame_deque;
   if (q.size() % frame_size != 0) {
     throw std::runtime_error("Queue is not a multiple of frame size.");
@@ -141,7 +141,7 @@ FrameVector<FRAME_SIZE> ConvertToFrameVector(QueueFv&& q) {
   return frame_vector;
 }
 
-VFrameVector ConvertToFrameVector(QueueFv&& q, int frame_size) {
+inline VFrameVector ConvertToFrameVector(QueueFv&& q, int frame_size) {
   VFrameVector frame_vector;
   if (q.size() % frame_size != 0) {
     throw std::runtime_error("Queue is not a multiple of frame size.");
