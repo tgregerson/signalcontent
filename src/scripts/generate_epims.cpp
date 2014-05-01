@@ -124,7 +124,7 @@ void print_epim_veto(ostream& os, const Parameters& parameters,
   const set<int>& ecal_vetoes = parameters.ecal_vetoes;
   const set<int>& hcal_vetoes = parameters.hcal_vetoes;
 
-  os << "module epim_veto" << unique_name_suffix << "(ecal, hcal, energy_pass);" << endl;
+  os << "module epim_veto" << unique_name_suffix << "(ecal, hcal, veto_pass);" << endl;
   os << "  parameter CAL_BITS = " << cal_bits << ";" << endl;
   os << "  input [CAL_BITS-1:0] ecal, hcal;" << endl;
   os << "  output reg veto_pass;" << endl;
@@ -132,14 +132,14 @@ void print_epim_veto(ostream& os, const Parameters& parameters,
   os << "  always@(*) begin" << endl;
   os << "    veto_pass = 1'b1;" << endl;
   if (!ecal_vetoes.empty()) {
-    os << "    case (ecal) begin" << endl;
+    os << "    case (ecal)" << endl;
     for (int val : ecal_vetoes) {
       os << "      " << cal_bits << "'d" << val << ": veto_pass = 1'b0;" << endl;
     }
     os << "    endcase" << endl;
   }
   if (!ecal_vetoes.empty()) {
-    os << "    case (hcal) begin" << endl;
+    os << "    case (hcal)" << endl;
     for (int val : hcal_vetoes) {
       os << "      " << cal_bits << "'d" << val << ": veto_pass = 1'b0;" << endl;
     }
@@ -155,7 +155,7 @@ vector<bool> get_memory_image(const Parameters& parameters) {
   assert (num_addr_bits > 0);
   const int num_contents_bits = 1 << (num_addr_bits - 1);
 
-  const int addr_mask = (1 << (num_addr_bits) - 1);
+  const int addr_mask = ((1 << num_addr_bits) - 1);
   const int ecal_mask = (1 << (parameters.cal_bits)) - 1;
   const int hcal_mask = addr_mask & ~ecal_mask;
 
