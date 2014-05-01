@@ -5,7 +5,14 @@
 #include <set>
 #include <sstream>
 
+#include "../base/four_value_logic.h"
+#include "../base/frame_fv.h"
+#include "../base/queue_fv.h"
+#include "../codec/huffman.h"
+
 using namespace std;
+using namespace signal_content::base;
+using namespace signal_content::codec;
 
 struct Parameters {
   int cal_bits = 10;
@@ -149,8 +156,8 @@ void print_epim_veto(ostream& os, const Parameters& parameters,
   os << "endmodule" << endl;
 }
 
-vector<bool> get_memory_image(const Parameters& parameters) {
-  vector<bool> memory;
+QueueFv get_memory_image(const Parameters& parameters) {
+  QueueFv memory;
   const int num_addr_bits = parameters.cal_bits * 2;
   assert (num_addr_bits > 0);
   const int num_contents_bits = 1 << (num_addr_bits - 1);
@@ -159,8 +166,6 @@ vector<bool> get_memory_image(const Parameters& parameters) {
   const int ecal_mask = (1 << (parameters.cal_bits)) - 1;
   const int hcal_mask = addr_mask & ~ecal_mask;
 
-  memory.reserve(num_contents_bits);
-
   for (int i = 0; i < num_contents_bits; ++i) {
     int ecal = i & ecal_mask;
     int hcal = i & hcal_mask;
@@ -168,10 +173,19 @@ vector<bool> get_memory_image(const Parameters& parameters) {
     bool ratio_pass = ratio > parameters.ratio_threshold;
     bool veto = (parameters.ecal_vetoes.find(ecal) != parameters.ecal_vetoes.end()) |
                 (parameters.hcal_vetoes.find(hcal) != parameters.hcal_vetoes.end());
-    memory[num_contents_bits] =
-        ((ecal > parameters.ecal_threshold) | ratio_pass) & ~veto;
+    memory.push(
+        signal_content::base::FourValueLogicFromBool(
+            ((ecal > parameters.ecal_threshold) | ratio_pass) & ~veto));
   }
   return memory;
+}
+
+void compress_memory_image(QueueFv& image) {
+  QueueFv dead_soon = image;
+  VFrameDeque memory_vfd = ConvertToFrameDeque(std::move(dead_soon), 64);
+  HuffmanCodec codec(memory_vfd, 64, 32);
+  vector<bool> encoded = codec.Encode(memory_vfd);
+  cout << "Encoded bits to size: " << encoded.size();
 }
 
 int main(int argc, char* argv[]) {
