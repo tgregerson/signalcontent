@@ -20,7 +20,8 @@ void LzwCodec::PopulateInitialMappings() {
     codeword_to_symbol_[symbol].push_back(short(symbol));
     // Will add to symbol codeword tree, since not yet present.
     QueueFv q = base::QueueFvFromBits<int, 8>(symbol);
-    GetCodewordBinary(&q);
+
+    // TODO populate codeword tree
   }
 }
 
@@ -31,9 +32,20 @@ int LzwCodec::GetCodewordBinary(QueueFv* bit_queue) {
   }
   NodeBinary* node = CHECK_NOTNULL(code_tree_root_binary_.get());
   while (true) {
-    // TODO Complete
+    if (bit_queue->empty()) {
+      return node->codeword;
+    }
+    // Treats X and Z as 0.
+    int index = bit_queue->front() == base::FourValueLogic::ONE ? 1 : 0;
+    NodeBinary* next_node = node->children[index];
+    if (next_node == nullptr) {
+      return node->codeword;
+    } else {
+      bit_queue->pop();
+      node = next_node;
+    }
   }
-  return 0;
+  return -1;  // Should not be reached.
 }
 
 }  // namespace codec
