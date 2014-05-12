@@ -1,5 +1,6 @@
 #include <cassert>
 
+#include <fstream>
 #include <iostream>
 #include <random>
 #include <set>
@@ -156,6 +157,29 @@ void print_epim_veto(ostream& os, const Parameters& parameters,
   os << "endmodule" << endl;
 }
 
+void print_vivado_script_preamble(
+    ostream& os, const string& project_dir, const string& part_num,
+    const string& hdl_dir) {
+  os << "create_project epim_test " << project_dir << " -part " << part_num
+     << endl;
+  os << "import_files " << hdl_dir << endl << endl;
+}
+
+void print_vivado_script_entry(
+    ostream& os, const string& name_suffix, const string& output_path) {
+  os << "set_property top epim" << name_suffix << " [current_fileset]" << endl;
+  os << "update_compile_order -fileset sources_1" << endl;
+  os << "synth_design -rtl -name -rtl_1" << endl;
+  os << "reset_run synth_1" << endl;
+  os << "launch_runs synth_1" << endl;
+  os << "refresh_design" << endl;
+  os << "open_run synth_1 -name netlist_1" << endl;
+  os << "report_utilization >> " << output_path << "/epim_" << name_suffix
+     << "_utilization.txt" << endl;
+  os << "report_timing >> " << output_path << "/epim_" << name_suffix
+     << "_timing.txt" << endl << endl;
+}
+
 QueueFv get_memory_image(const Parameters& parameters) {
   QueueFv memory;
   const int num_addr_bits = parameters.cal_bits * 2;
@@ -190,8 +214,9 @@ void compress_memory_image(QueueFv& image) {
 
 int main(int argc, char* argv[]) {
 
-  ostream& os = cout;
   Parameters parameters;
+
+  const string output_file_prefix = "out/epim_";
 
   const int initial_seed = 0;
   const int start_num_vetoes = 0;
@@ -208,6 +233,14 @@ int main(int argc, char* argv[]) {
 
   for (int num_vetoes = start_num_vetoes; num_vetoes < end_num_vetoes;
        num_vetoes += increment_vetoes) {
+    ofstream output_file;
+    stringstream output_file_name;
+    output_file_name << output_file_prefix << num_vetoes << ".v";
+    output_file.open(output_file_name.str(), ofstream::out | ofstream::trunc);
+    assert(output_file.is_open());
+
+    ostream& os = output_file;
+
     while (parameters.ecal_vetoes.size() < num_vetoes) {
       parameters.ecal_vetoes.insert(distribution(generator));
     }
@@ -227,8 +260,8 @@ int main(int argc, char* argv[]) {
     print_epim_veto(os, parameters, ss.str());
     os << endl;
 
-    QueueFv memory = get_memory_image(parameters);
-    compress_memory_image(memory);
+    //QueueFv memory = get_memory_image(parameters);
+    //compress_memory_image(memory);
   }
 
   return 0;
