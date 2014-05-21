@@ -51,33 +51,8 @@ void LzwCodec::PopulateInitialMappings() {
 
     code_tree_root_->children.at(symbol).reset(
         new Node256Ary(next_codeword_slot_));
-    code_tree_root_binary_->children.at(symbol).reset(
-        new NodeBinary(next_codeword_slot_));
     next_codeword_slot_++;
   }
-}
-
-int LzwCodec::GetCodewordBinary(QueueFv* bit_queue) {
-  if (CHECK_NOTNULL(bit_queue)->size() < 8) {
-    throw std::runtime_error("Binary stream contained less than minimum "
-                             "number of symbol bits");
-  }
-  NodeBinary* node = CHECK_NOTNULL(code_tree_root_binary_.get());
-  while (true) {
-    if (bit_queue->empty()) {
-      return node->codeword;
-    }
-    // Treats X and Z as 0.
-    int index = bit_queue->front() == base::FourValueLogic::ONE ? 1 : 0;
-    NodeBinary* next_node = node->children[index].get();
-    if (next_node == nullptr) {
-      return node->codeword;
-    } else {
-      bit_queue->pop();
-      node = next_node;
-    }
-  }
-  return -1;  // Should not be reached.
 }
 
 int LzwCodec::GetCodeword256(QueueFv* bit_queue) {
