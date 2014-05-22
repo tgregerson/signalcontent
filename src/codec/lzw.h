@@ -23,7 +23,10 @@ class LzwCodec {
   // Assigns sequences of symbols from 'queue_fv' to codewords in the
   // the dictionary. Symbols are considered to be 8 bits, and codewords are
   // 12 bits.
-  void PopulateDictionary(base::QueueFv* queue_fv);
+  void PopulateDictionary(const base::QueueFv& queue_fv);
+
+  std::vector<int> Encode(const base::QueueFv& bits);
+  std::vector<bool> Decode(const std::vector<int>& bits);
 
  private:
   struct Node256Ary {
@@ -43,12 +46,12 @@ class LzwCodec {
   int GetCodeword256(base::QueueFv* queue_fv);
 
   // Peels off 8 bits from queue (or all remaining bits if less than 8).
-  char Get8Bits(base::QueueFv* queue_fv);
+  unsigned char Get8Bits(base::QueueFv* queue_fv);
 
   // Code tree for encoding symbol stream to codewords.
   std::unique_ptr<Node256Ary> code_tree_root_;
   // Dictionary for decoding codewords.
-  std::array<std::vector<char>, 4096> codeword_to_symbol_;
+  std::array<std::vector<unsigned char>, 4096> codeword_to_symbol_;
   int next_codeword_slot_{0};
 };
 
