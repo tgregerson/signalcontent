@@ -10,6 +10,7 @@
 #include "../base/frame_fv.h"
 #include "../base/queue_fv.h"
 #include "../codec/huffman.h"
+#include "../codec/lzw.h"
 
 using namespace std;
 using namespace signal_content::base;
@@ -22,6 +23,8 @@ struct Parameters {
   int ecal_threshold = 50;
   set<int> ecal_vetoes;
   set<int> hcal_vetoes;
+  set<int> ecalhcal_vetoes;
+  set<int> segment_end_points;
 };
 
 void print_epim(ostream& os, const Parameters& parameters, const string& unique_name_suffix) {
@@ -112,6 +115,7 @@ void print_epim_ratio(ostream& os, const Parameters& parameters, const string& u
 
 void print_epim_energy(ostream& os, const Parameters& parameters, const string& unique_name_suffix) {
   int cal_bits = parameters.cal_bits;
+  int concatenated_cal_bits = 2 * parameters.cal_bits;
   int ecal_threshold = parameters.ecal_threshold;
 
   os << "module epim_energy" << unique_name_suffix << "(ecal, hcal, energy_pass);" << endl;
@@ -121,7 +125,28 @@ void print_epim_energy(ostream& os, const Parameters& parameters, const string& 
   os << "  output reg energy_pass;" << endl;
   os << endl;
   os << "  always@(*) begin" << endl;
-  os << "    energy_pass = ecal > ECAL_THRESHOLD;" << endl;
+  if (parameters.segment_end_points.empty()) {
+    os << "    energy_pass = ecal > ECAL_THRESHOLD;" << endl;
+  } else {
+    os << "    energy_pass = 1'b0;" << endl;
+    os << "    ecalhcal = {ecal, hcal};" << endl;
+    auto it = parameters.segment_end_points.begin();
+      os << "    if (ecalhcal < " << concatenated_cal_bits << "'d"
+         << *it << ") begin energy_pass = 1'b1; end" << endl;
+    it++;
+    int next_pass_val = 0;
+    for (; it != parameters.segment_end_points.end(); it++) {
+      int end_point = *it;
+      os << "    else if (ecalhcal < " << concatenated_cal_bits << "'d"
+         << end_point << ") begin energy_pass = 1'b" << next_pass_val
+         << "; end" << endl;
+      if (next_pass_val == 0) {
+        next_pass_val = 1;
+      } else {
+        next_pass_val = 0;
+      }
+    }
+  }
   os << "  end" << endl;
   os << "endmodule" << endl;
 }
@@ -129,16 +154,20 @@ void print_epim_energy(ostream& os, const Parameters& parameters, const string& 
 void print_epim_veto(ostream& os, const Parameters& parameters,
                      const string& unique_name_suffix) {
   int cal_bits = parameters.cal_bits;
+  int combined_cal_bits = cal_bits * 2;
   const set<int>& ecal_vetoes = parameters.ecal_vetoes;
   const set<int>& hcal_vetoes = parameters.hcal_vetoes;
+  const set<int>& ecalhcal_vetoes = parameters.ecalhcal_vetoes;
 
   os << "module epim_veto" << unique_name_suffix << "(ecal, hcal, veto_pass);" << endl;
   os << "  parameter CAL_BITS = " << cal_bits << ";" << endl;
   os << "  input [CAL_BITS-1:0] ecal, hcal;" << endl;
   os << "  output reg veto_pass;" << endl;
   os << endl;
+  os << "  reg [2*CAL_BITS-1:0] ecalhcal;" << endl;
   os << "  always@(*) begin" << endl;
   os << "    veto_pass = 1'b1;" << endl;
+  os << "    ecalhcal = {ecal, hcal};" << endl;
   if (!ecal_vetoes.empty()) {
     os << "    case (ecal)" << endl;
     for (int val : ecal_vetoes) {
@@ -153,15 +182,44 @@ void print_epim_veto(ostream& os, const Parameters& parameters,
     }
     os << "    endcase" << endl;
   }
+  if (!ecalhcal_vetoes.empty()) {
+    os << "    case (ecalhcal)" << endl;
+    for (int val : ecalhcal_vetoes) {
+      os << "      " << combined_cal_bits << "'d" << val << ": veto_pass = 1'b0;" << endl;
+    }
+    os << "    endcase" << endl;
+  }
   os << "  end" << endl;
   os << "endmodule" << endl;
+}
+
+void print_epim_verilog(const string& output_dir,
+                        const string& unique_name_suffix,
+                        const Parameters& parameters) {
+  ofstream output_file;
+  stringstream output_file_name;
+  output_file_name << output_dir << "/epim" << unique_name_suffix << ".v";
+  output_file.open(output_file_name.str(), ofstream::out | ofstream::trunc);
+  assert(output_file.is_open());
+
+  ostream& os = output_file;
+
+  print_epim(os, parameters, unique_name_suffix);
+  os << endl;
+  print_epim_ratio(os, parameters, unique_name_suffix);
+  os << endl;
+  print_epim_energy(os, parameters, unique_name_suffix);
+  os << endl;
+
+  print_epim_veto(os, parameters, unique_name_suffix);
+  os << endl;
 }
 
 void print_vivado_script_preamble(
     ostream& os, const string& project_dir, const string& part_num,
     const string& hdl_dir) {
-  os << "create_project epim_test " << project_dir << " -part " << part_num
-     << endl;
+  os << "create_project epim_test -force " << project_dir << "/epim_test -part "
+     << part_num << endl;
   os << "import_files " << hdl_dir << endl << endl;
 }
 
@@ -169,15 +227,15 @@ void print_vivado_script_entry(
     ostream& os, const string& name_suffix, const string& output_path) {
   os << "set_property top epim" << name_suffix << " [current_fileset]" << endl;
   os << "update_compile_order -fileset sources_1" << endl;
-  os << "synth_design -rtl -name -rtl_1" << endl;
-  os << "reset_run synth_1" << endl;
-  os << "launch_runs synth_1" << endl;
-  os << "refresh_design" << endl;
-  os << "open_run synth_1 -name netlist_1" << endl;
-  os << "report_utilization >> " << output_path << "/epim_" << name_suffix
+  os << "synth_design" << endl;
+  os << "report_utilization > " << output_path << "/epim" << name_suffix
      << "_utilization.txt" << endl;
-  os << "report_timing >> " << output_path << "/epim_" << name_suffix
+  os << "report_timing > " << output_path << "/epim" << name_suffix
      << "_timing.txt" << endl << endl;
+}
+
+void print_vivado_script_post(ostream& os) {
+  os << "exit" << endl;
 }
 
 QueueFv get_memory_image(const Parameters& parameters) {
@@ -205,63 +263,143 @@ QueueFv get_memory_image(const Parameters& parameters) {
 }
 
 void compress_memory_image(QueueFv& image) {
+  // Compress with LZW
+  LzwCodec lzw_codec;
+  lzw_codec.PopulateDictionary(image);
+  vector<int> lzw_encoded = lzw_codec.Encode(image);
+  cout << (lzw_encoded.size() * 12) << ", ";
+
+
   QueueFv dead_soon = image;
   VFrameDeque memory_vfd = ConvertToFrameDeque(std::move(dead_soon), 64);
-  HuffmanCodec codec(memory_vfd, 64, 32);
-  vector<bool> encoded = codec.Encode(memory_vfd);
-  cout << "Encoded bits to size: " << encoded.size() << endl;
+  HuffmanCodec huffman_codec(memory_vfd, 64, 32);
+  vector<bool> huffman_encoded = huffman_codec.Encode(memory_vfd);
+  cout << huffman_encoded.size() << endl;
 }
 
 int main(int argc, char* argv[]) {
 
   Parameters parameters;
 
-  const string output_file_prefix = "out/epim_";
+  bool make_verilog = true;
+  bool make_scripts = true;
+  bool compress_memory = false;
+  bool use_concatenated = true;
 
   const int initial_seed = 0;
+
   const int start_num_vetoes = 0;
   const int increment_vetoes = 10;
-  const int end_num_vetoes = 200;
+  const int end_num_vetoes = 500;
   const int veto_energy_min = 0;
   const int veto_energy_max = 1023;
+  const int ecalhcal_min = 0;
+  const int ecalhcal_max = 0x0FFFFF;  // 20 bits
+
+  const int num_segments = 10;
+  const int avg_segment_length = ecalhcal_max / num_segments;
+  const int min_segment_length = ceil(0.5 * avg_segment_length);
+  const int max_segment_length = 1.5 * avg_segment_length;
+
+  const string xilinx_workspace = "/localhome/gregerso/tools/Xilinx/workspace";
+  const string xilinx_device = "xc7a200tlffg1156-2L";
+  const string hdl_dir = "/localhome/gregerso/git/signalcontent/src/scripts/out";
+  const string script_dir = "/localhome/gregerso/git/signalcontent/src/scripts/out";
 
   // We continue using previous veto values, so successive sets of vetoes are
   // supersets of the previous ones.
   default_random_engine generator(initial_seed);
   uniform_int_distribution<int> distribution(
       veto_energy_min, veto_energy_max);
+  uniform_int_distribution<int> ecalhcal_distribution(
+      ecalhcal_min, ecalhcal_max);
+  uniform_int_distribution<int> segment_distribution(
+      min_segment_length, max_segment_length);
 
-  for (int num_vetoes = start_num_vetoes; num_vetoes < end_num_vetoes;
-       num_vetoes += increment_vetoes) {
-    ofstream output_file;
-    stringstream output_file_name;
-    output_file_name << output_file_prefix << num_vetoes << ".v";
-    output_file.open(output_file_name.str(), ofstream::out | ofstream::trunc);
-    assert(output_file.is_open());
-
-    ostream& os = output_file;
-
-    while (parameters.ecal_vetoes.size() < num_vetoes) {
-      parameters.ecal_vetoes.insert(distribution(generator));
-    }
-    while (parameters.hcal_vetoes.size() < num_vetoes) {
-      parameters.hcal_vetoes.insert(distribution(generator));
-    }
-
+  ofstream script_file;
+  if (make_scripts) {
     stringstream ss;
-    ss << "_" << num_vetoes;
-    print_epim(os, parameters, ss.str());
-    os << endl;
-    print_epim_ratio(os, parameters, ss.str());
-    os << endl;
-    print_epim_energy(os, parameters, ss.str());
-    os << endl;
+    ss << script_dir << "/epim_";
+    ss << "0-" << num_segments << "_";
+    ss << start_num_vetoes << "-" << end_num_vetoes << ".tcl";
+    script_file.open(ss.str(), ofstream::out | ofstream::trunc);
+    assert(script_file.is_open());
+    print_vivado_script_preamble(script_file,
+                                 xilinx_workspace,
+                                 xilinx_device,
+                                 hdl_dir);
+  }
 
-    print_epim_veto(os, parameters, ss.str());
-    os << endl;
+  vector<Parameters> segment_parameter_sets;
+  for (int segment = 1; segment < num_segments; ++segment) {
+    Parameters parameters;
+    if (!segment_parameter_sets.empty()) {
+      parameters = segment_parameter_sets.back();
+    }
+    int last_end_point = 0;
+    while (parameters.segment_end_points.size() < segment &&
+           last_end_point < ecalhcal_max) {
+      int new_end_point = last_end_point + segment_distribution(generator);
+      if (new_end_point < ecalhcal_max) {
+        parameters.segment_end_points.insert(new_end_point);
+      }
+      last_end_point = new_end_point;
+    }
+    segment_parameter_sets.push_back(parameters);
+  }
 
-    //QueueFv memory = get_memory_image(parameters);
-    //compress_memory_image(memory);
+  vector<Parameters> parameter_sets;
+  for (Parameters parameters : segment_parameter_sets) {
+    for (int num_vetoes = start_num_vetoes; num_vetoes < end_num_vetoes;
+        num_vetoes += increment_vetoes) {
+      if (!parameter_sets.empty() &&
+          (parameter_sets.back().ecal_vetoes.size() +
+           parameter_sets.back().ecalhcal_vetoes.size() < num_vetoes)) {
+        // Make sure that larger sets are supersets of smaller ones.
+        parameters.ecal_vetoes = parameter_sets.back().ecal_vetoes;
+        parameters.hcal_vetoes = parameter_sets.back().hcal_vetoes;
+        parameters.ecalhcal_vetoes = parameter_sets.back().ecalhcal_vetoes;
+      }
+
+      if (use_concatenated) {
+        while (parameters.ecalhcal_vetoes.size() < num_vetoes) {
+          parameters.ecalhcal_vetoes.insert(ecalhcal_distribution(generator));
+        }
+      } else {
+        while (parameters.ecal_vetoes.size() < num_vetoes) {
+          parameters.ecal_vetoes.insert(distribution(generator));
+        }
+        while (parameters.hcal_vetoes.size() < num_vetoes) {
+          parameters.hcal_vetoes.insert(distribution(generator));
+        }
+      }
+      parameter_sets.push_back(parameters);
+    }
+  }
+
+  for (Parameters parameters : parameter_sets) {
+    stringstream ss;
+    int num_vetoes = parameters.ecal_vetoes.size() +
+                     parameters.hcal_vetoes.size() +
+                     parameters.ecalhcal_vetoes.size();
+    int num_segments = parameters.segment_end_points.size();
+    ss << "_" << num_segments << "_" << num_vetoes;
+
+    if (make_verilog) {
+      print_epim_verilog(hdl_dir, ss.str(), parameters);
+    }
+    if (make_scripts) {
+      print_vivado_script_entry(
+          script_file, ss.str(), "/localhome/gregerso/temp");
+    }
+    if (compress_memory) {
+      QueueFv memory = get_memory_image(parameters);
+      compress_memory_image(memory);
+    }
+  }
+
+  if (make_scripts) {
+    print_vivado_script_post(script_file);
   }
 
   return 0;
