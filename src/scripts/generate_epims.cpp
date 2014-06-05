@@ -124,6 +124,8 @@ void print_epim_energy(ostream& os, const Parameters& parameters, const string& 
   os << "  input [CAL_BITS-1:0] ecal, hcal;" << endl;
   os << "  output reg energy_pass;" << endl;
   os << endl;
+  os << "  reg [2*CAL_BITS-1:0] ecalhcal;" << endl;
+  os << endl;
   os << "  always@(*) begin" << endl;
   if (parameters.segment_end_points.empty()) {
     os << "    energy_pass = ecal > ECAL_THRESHOLD;" << endl;
@@ -226,6 +228,7 @@ void print_vivado_script_preamble(
 void print_vivado_script_entry(
     ostream& os, const string& name_suffix, const string& output_path) {
   os << "set_property top epim" << name_suffix << " [current_fileset]" << endl;
+  os << "set_property strategy no_bram [get_runs synth_1]" << endl;
   os << "update_compile_order -fileset sources_1" << endl;
   os << "synth_design" << endl;
   os << "report_utilization > " << output_path << "/epim" << name_suffix
@@ -262,28 +265,32 @@ QueueFv get_memory_image(const Parameters& parameters) {
   return memory;
 }
 
-void compress_memory_image(QueueFv& image) {
+void compress_memory_image(ofstream& os, QueueFv& image, Parameters& parameters) {
+  int segments = parameters.segment_end_points.size();
+  int vetoes = parameters.ecal_vetoes.size() + parameters.ecalhcal_vetoes.size();
+
+  os << segments << ", " << vetoes << ", ";
+
   // Compress with LZW
   LzwCodec lzw_codec;
   lzw_codec.PopulateDictionary(image);
   vector<int> lzw_encoded = lzw_codec.Encode(image);
-  cout << (lzw_encoded.size() * 12) << ", ";
-
+  os << (lzw_encoded.size() * 12) << ", ";
 
   QueueFv dead_soon = image;
   VFrameDeque memory_vfd = ConvertToFrameDeque(std::move(dead_soon), 64);
-  HuffmanCodec huffman_codec(memory_vfd, 64, 32);
+  HuffmanCodec huffman_codec(memory_vfd, 64, 16);
   vector<bool> huffman_encoded = huffman_codec.Encode(memory_vfd);
-  cout << huffman_encoded.size() << endl;
+  os << huffman_encoded.size() << endl;
 }
 
 int main(int argc, char* argv[]) {
 
   Parameters parameters;
 
-  bool make_verilog = true;
-  bool make_scripts = true;
-  bool compress_memory = false;
+  bool make_verilog = false;
+  bool make_scripts = false;
+  bool compress_memory = true;
   bool use_concatenated = true;
 
   const int initial_seed = 0;
@@ -296,7 +303,7 @@ int main(int argc, char* argv[]) {
   const int ecalhcal_min = 0;
   const int ecalhcal_max = 0x0FFFFF;  // 20 bits
 
-  const int num_segments = 10;
+  const int num_segments = 20;
   const int avg_segment_length = ecalhcal_max / num_segments;
   const int min_segment_length = ceil(0.5 * avg_segment_length);
   const int max_segment_length = 1.5 * avg_segment_length;
@@ -305,6 +312,7 @@ int main(int argc, char* argv[]) {
   const string xilinx_device = "xc7a200tlffg1156-2L";
   const string hdl_dir = "/localhome/gregerso/git/signalcontent/src/scripts/out";
   const string script_dir = "/localhome/gregerso/git/signalcontent/src/scripts/out";
+  const string memory_compression_dir = "/localhome/gregerso/git/signalcontent/src/scripts/out";
 
   // We continue using previous veto values, so successive sets of vetoes are
   // supersets of the previous ones.
@@ -328,6 +336,16 @@ int main(int argc, char* argv[]) {
                                  xilinx_workspace,
                                  xilinx_device,
                                  hdl_dir);
+  }
+
+  ofstream memory_compression_file;
+  if (compress_memory) {
+    stringstream ss;
+    ss << memory_compression_dir << "/memory_epim_";
+    ss << "0-" << num_segments << "_";
+    ss << start_num_vetoes << "-" << end_num_vetoes << ".tcl";
+    memory_compression_file.open(ss.str(), ofstream::out | ofstream::trunc);
+    assert(memory_compression_file.is_open());
   }
 
   vector<Parameters> segment_parameter_sets;
@@ -393,8 +411,9 @@ int main(int argc, char* argv[]) {
           script_file, ss.str(), "/localhome/gregerso/temp");
     }
     if (compress_memory) {
+      cout << "Compressing " << num_segments << "_" << num_vetoes << endl;
       QueueFv memory = get_memory_image(parameters);
-      compress_memory_image(memory);
+      compress_memory_image(memory_compression_file, memory, parameters);
     }
   }
 
