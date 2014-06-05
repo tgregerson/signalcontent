@@ -106,6 +106,19 @@ FrameDeque<FRAME_SIZE> ConvertToFrameDeque(QueueFv&& q) {
   return frame_deque;
 }
 
+template <size_t FRAME_SIZE>
+QueueFv ConvertFromFrameDeque(FrameDeque<FRAME_SIZE>&& fd) {
+  QueueFv q;
+  while (!fd.empty()) {
+    FrameFv<FRAME_SIZE>& frame = fd.front();
+    for (int bit = 0; bit < frame.size(); ++bit) {
+      q.push(frame.at(bit));
+    }
+    fd.pop_front();
+  }
+  return q;
+}
+
 inline VFrameDeque ConvertToFrameDeque(QueueFv&& q, int frame_size) {
   VFrameDeque frame_deque;
   if (q.size() % frame_size != 0) {
@@ -121,6 +134,18 @@ inline VFrameDeque ConvertToFrameDeque(QueueFv&& q, int frame_size) {
     frame_deque.emplace_back(std::move(frame));
   }
   return frame_deque;
+}
+
+inline QueueFv ConvertFromFrameDeque(VFrameDeque&& fd) {
+  QueueFv q;
+  while (!fd.empty()) {
+    VFrameFv& frame = fd.front();
+    for (int bit = 0; bit < frame.size(); ++bit) {
+      q.push(frame.at(bit));
+    }
+    fd.pop_front();
+  }
+  return q;
 }
 
 template <size_t FRAME_SIZE>
