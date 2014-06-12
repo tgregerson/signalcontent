@@ -343,7 +343,7 @@ int main(int argc, char* argv[]) {
     stringstream ss;
     ss << memory_compression_dir << "/memory_epim_";
     ss << "0-" << num_segments << "_";
-    ss << start_num_vetoes << "-" << end_num_vetoes << ".tcl";
+    ss << start_num_vetoes << "-" << end_num_vetoes << ".txt";
     memory_compression_file.open(ss.str(), ofstream::out | ofstream::trunc);
     assert(memory_compression_file.is_open());
   }
