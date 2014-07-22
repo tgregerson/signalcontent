@@ -12,6 +12,9 @@
 
 #include <cassert>
 #include <cmath>
+
+#include <map>
+#include <utility>
 #include <vector>
 
 #include "../base/four_value_logic.h"
@@ -19,25 +22,48 @@
 namespace signal_content {
 namespace codec {
 
+template <typename WordType>
 class ShannonEntropyAccumulator {
  public:
-  typedef std::vector<base::FourValueLogic> WordType;
 
-  ShannonEntropyAccumulator(int word_size) : word_size_(word_size) {}
+  ShannonEntropyAccumulator() {}
   ~ShannonEntropyAccumulator() {}
 
-  void AddSample(WordType word);
-  double GetEntropy(WordType word);
-
- private:
-  double ComputeShannonEntropy(double probability) {
-    return -probability * log2(probability) -
-           (1 - probability) * log2(1 - probability);
+  void AddSample(WordType word) {
+    auto it = word_counts_.find(word);
+    if (it == word_counts_.end()) {
+      word_counts_.insert(make_pair(word, 1));
+    } else {
+      it->second = it->second + 1;
+    }
+    ++total_words_;
   }
 
-  int word_size_;
+  double GetEntropy() {
+    double entropy = 0.0;
+    for (auto word_freq_pair : word_counts_) {
+      entropy += GetWordEntropy(word_freq_pair.first);
+    }
+    return entropy;
+  }
+
+  double GetWordEntropy(WordType word) {
+    if (total_words_ <= 0) {
+      return 0.0;
+    } else {
+      int count = word_counts_[word];
+      double probability = ((double)count)/((double)total_words_);
+      return ComputeShannonWordEntropy(probability);
+    }
+  }
+
+ private:
+  double ComputeShannonWordEntropy(double probability) {
+    return -probability * log2(probability);
+  }
+
   int total_words_{0};
-  std::vector<int> word_counts_;
+  std::map<WordType, int> word_counts_;
 };
 }
 }
