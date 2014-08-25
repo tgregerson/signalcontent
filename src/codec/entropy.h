@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cmath>
 
+#include <iostream>
 #include <map>
 #include <utility>
 #include <vector>
@@ -32,7 +33,7 @@ class ShannonEntropyAccumulator {
   void AddSample(WordType word) {
     auto it = word_counts_.find(word);
     if (it == word_counts_.end()) {
-      word_counts_.insert(make_pair(word, 1));
+      word_counts_.insert(std::make_pair(word, 1));
     } else {
       it->second = it->second + 1;
     }
@@ -53,13 +54,23 @@ class ShannonEntropyAccumulator {
     } else {
       int count = word_counts_[word];
       double probability = ((double)count)/((double)total_words_);
+      std::cout << word << " " << probability << " probability\n";
       return ComputeShannonWordEntropy(probability);
     }
   }
 
+  void Reset() {
+    total_words_ = 0;
+    word_counts_.clear();
+  }
+
  private:
   double ComputeShannonWordEntropy(double probability) {
-    return -probability * log2(probability);
+    if (probability <= 0) {
+      return 0.0;
+    } else {
+      return -probability * log2(probability);
+    }
   }
 
   int total_words_{0};
