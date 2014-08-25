@@ -1,0 +1,11 @@
+create_project epim_test /localhome/gregerso/tools/Xilinx/workspace/epim_test -part xc7a200tlffg1156-2L
+import_files /localhome/gregerso/git/signalcontent/src/scripts/out
+set_property top epim_190 [current_fileset]
+update_compile_order -fileset sources_1
+synth_design -rtl -name -rtl_1
+reset_run synth_1
+launch_runs synth_1
+refresh_design
+open_run synth_1 -name netlist_1
+report_utilization
+report_timing

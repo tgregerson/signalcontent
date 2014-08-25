@@ -7,8 +7,9 @@
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;
 
-#include <cv.h>
-#include <highgui.h>
+#include <opencv/cv.h>
+//#include <highgui.h>
+#include <opencv2/highgui/highgui.hpp>
 
 #include "dlsc_stereobm_models.h"
 
