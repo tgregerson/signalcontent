@@ -1,5 +1,6 @@
 #include <cassert>
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <random>
@@ -245,22 +246,63 @@ QueueFv get_memory_image(const Parameters& parameters) {
   QueueFv memory;
   const int num_addr_bits = parameters.cal_bits * 2;
   assert (num_addr_bits > 0);
-  const int num_contents_bits = 1 << (num_addr_bits - 1);
+  const int num_contents_bits = 1 << num_addr_bits;
 
   const int addr_mask = ((1 << num_addr_bits) - 1);
   const int ecal_mask = (1 << (parameters.cal_bits)) - 1;
   const int hcal_mask = addr_mask & ~ecal_mask;
 
+  bool segment_value = false;
+  map<int, bool> segment_end_map;
+  segment_end_map.insert(make_pair(0, segment_value));
+  for (int end_val : parameters.segment_end_points) {
+    segment_end_map.insert(make_pair(end_val, segment_value));
+    segment_value = ~segment_value;
+  }
+  /*
+  for (auto it : segment_end_map) {
+    cout << "Segment End " << it.first << " " << it.second << endl;
+  }
+  cout << "ECALHCAL Vetoes: ";
+  for (auto it : parameters.ecalhcal_vetoes) {
+    cout << it << " ";
+  }
+  cout << endl;
+  */
+
+  auto next_segment_end_point_it = parameters.segment_end_points.begin();
+  assert (next_segment_end_point_it != parameters.segment_end_points.end());
   for (int i = 0; i < num_contents_bits; ++i) {
     int ecal = i & ecal_mask;
-    int hcal = i & hcal_mask;
-    double ratio = ((double)ecal) / ((double)ecal + (double)hcal);
+    int hcal = (i & hcal_mask) >> parameters.cal_bits;
+    double ratio = 0.0;
+    if (ecal + hcal > 0) {
+      ratio = ((double)ecal) / ((double)ecal + (double)hcal);
+    }
     bool ratio_pass = ratio > parameters.ratio_threshold;
+    if (next_segment_end_point_it != parameters.segment_end_points.end() &&
+        ratio_pass >= *next_segment_end_point_it) {
+      next_segment_end_point_it++;
+    }
     bool veto = (parameters.ecal_vetoes.find(ecal) != parameters.ecal_vetoes.end()) |
-                (parameters.hcal_vetoes.find(hcal) != parameters.hcal_vetoes.end());
+                (parameters.hcal_vetoes.find(hcal) != parameters.hcal_vetoes.end()) |
+                (parameters.ecalhcal_vetoes.find(i) != parameters.ecalhcal_vetoes.end());
+    auto ecal_endpoint_it = std::upper_bound(parameters.segment_end_points.begin(),
+                                             parameters.segment_end_points.end(), ecal);
+    int ecal_endpoint = (ecal_endpoint_it == parameters.segment_end_points.end()) ?
+                         0 : *ecal_endpoint_it;
     memory.push(
         signal_content::base::FourValueLogicFromBool(
-            ((ecal > parameters.ecal_threshold) | ratio_pass) & ~veto));
+            ~veto & (ratio_pass | segment_end_map.at(ecal_endpoint))));
+    /*
+    cout << i << " " << ratio << " " << parameters.ratio_threshold << " " << ecal << " " << hcal << " ";
+    cout << "(";
+    cout << (veto ? "1" : "0");
+    cout << (ratio_pass ? "1" : "0");
+    cout << (segment_end_map.at(ecal_endpoint) ? "1" : "0");
+    cout << ")";
+    cout << signal_content::base::FVLtoChar(memory.back()) << "\n";
+    */
   }
   return memory;
 }
@@ -269,7 +311,7 @@ void compress_memory_image(ofstream& os, QueueFv& image, Parameters& parameters)
   int segments = parameters.segment_end_points.size();
   int vetoes = parameters.ecal_vetoes.size() + parameters.ecalhcal_vetoes.size();
 
-  os << segments << ", " << vetoes << ", ";
+  os << segments << ", " << vetoes << ", " << image.size() << ", ";
 
   // Compress with LZW
   LzwCodec lzw_codec;
@@ -284,6 +326,81 @@ void compress_memory_image(ofstream& os, QueueFv& image, Parameters& parameters)
   os << huffman_encoded.size() << endl;
 }
 
+struct TreeNode {
+  TreeNode() : value(FourValueLogic::Z), is_leaf(false), left(nullptr),
+                right(nullptr) {}
+  TreeNode(FourValueLogic v, bool f, TreeNode* l, TreeNode* r)
+      : value(v), is_leaf(f), left(l), right(r) {}
+  FourValueLogic value;
+  bool is_leaf;
+  TreeNode* left;
+  TreeNode* right;
+};
+
+pair<FourValueLogic, int> get_value_cost(TreeNode* node) {
+  if (node->is_leaf) {
+    return make_pair(node->value, 1);
+  } else {
+    pair<FourValueLogic, int> left_value_cost = get_value_cost(node->left);
+    pair<FourValueLogic, int> right_value_cost = get_value_cost(node->right);
+    if (left_value_cost.first == right_value_cost.first &&
+        left_value_cost.first != FourValueLogic::X &&
+        left_value_cost.first != FourValueLogic::Z) {
+      assert(left_value_cost.second == 1 && right_value_cost.second == 1);
+      return make_pair(left_value_cost.first, 1);
+    } else {
+      return make_pair(FourValueLogic::X,
+                       left_value_cost.second + right_value_cost.second);
+    }
+  }
+}
+
+void compress_memory_tree(ofstream& os, QueueFv& image, Parameters& parameters) {
+  int segments = parameters.segment_end_points.size();
+  int vetoes = parameters.ecal_vetoes.size() + parameters.ecalhcal_vetoes.size();
+
+  os << segments << ", " << vetoes << ", " << image.size() << ", ";
+  vector<bool> memory_vect;
+  while (!image.empty()) {
+    memory_vect.push_back(bool(image.front()));
+    image.pop();
+  }
+
+  vector<TreeNode*> all_nodes;
+
+  // Build tree.
+  TreeNode* root = new TreeNode();
+  vector<TreeNode*> last_level;
+  last_level.push_back(root);
+  all_nodes.push_back(root);
+  for (int i = 0; i < 20; ++i) {
+    vector<TreeNode*> next_level;
+    for (TreeNode* node : last_level) {
+      TreeNode* left = new TreeNode();
+      TreeNode* right = new TreeNode();
+      node->left = left;
+      node->right = right;
+      next_level.push_back(left);
+      next_level.push_back(right);
+      all_nodes.push_back(left);
+      all_nodes.push_back(right);
+    }
+    last_level = next_level;
+  }
+  assert(last_level.size() == (1 << 20));
+  for (int i = 0; i < (1 << 20); ++i) {
+    last_level[i]->is_leaf = true;
+    last_level[i]->value =
+        signal_content::base::FourValueLogicFromBool(memory_vect[i]);
+  }
+
+  pair<FourValueLogic, int> root_value_cost = get_value_cost(root);
+  os << root_value_cost.second << endl;
+  for (TreeNode* node : all_nodes) {
+    delete node;
+  }
+}
+
 int main(int argc, char* argv[]) {
 
   Parameters parameters;
@@ -291,19 +408,20 @@ int main(int argc, char* argv[]) {
   bool make_verilog = false;
   bool make_scripts = false;
   bool compress_memory = true;
+  bool compress_tree = false;
   bool use_concatenated = true;
 
   const int initial_seed = 0;
 
   const int start_num_vetoes = 0;
-  const int increment_vetoes = 10;
-  const int end_num_vetoes = 500;
+  const int increment_vetoes = 500;
+  const int end_num_vetoes = 500000;
   const int veto_energy_min = 0;
   const int veto_energy_max = 1023;
   const int ecalhcal_min = 0;
   const int ecalhcal_max = 0x0FFFFF;  // 20 bits
 
-  const int num_segments = 20;
+  const int num_segments = 2;
   const int avg_segment_length = ecalhcal_max / num_segments;
   const int min_segment_length = ceil(0.5 * avg_segment_length);
   const int max_segment_length = 1.5 * avg_segment_length;
@@ -346,6 +464,16 @@ int main(int argc, char* argv[]) {
     ss << start_num_vetoes << "-" << end_num_vetoes << ".txt";
     memory_compression_file.open(ss.str(), ofstream::out | ofstream::trunc);
     assert(memory_compression_file.is_open());
+  }
+
+  ofstream tree_compression_file;
+  if (compress_tree) {
+    stringstream ss;
+    ss << memory_compression_dir << "/tree_epim_";
+    ss << "0-" << num_segments << "_";
+    ss << start_num_vetoes << "-" << end_num_vetoes << ".txt";
+    tree_compression_file.open(ss.str(), ofstream::out | ofstream::trunc);
+    assert(tree_compression_file.is_open());
   }
 
   vector<Parameters> segment_parameter_sets;
@@ -414,6 +542,11 @@ int main(int argc, char* argv[]) {
       cout << "Compressing " << num_segments << "_" << num_vetoes << endl;
       QueueFv memory = get_memory_image(parameters);
       compress_memory_image(memory_compression_file, memory, parameters);
+    }
+    if (compress_tree) {
+      cout << "Compressing " << num_segments << "_" << num_vetoes << endl;
+      QueueFv memory = get_memory_image(parameters);
+      compress_memory_tree(tree_compression_file, memory, parameters);
     }
   }
 
