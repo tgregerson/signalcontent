@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <random>
 #include <set>
@@ -259,19 +260,8 @@ QueueFv get_memory_image(const Parameters& parameters) {
     segment_end_map.insert(make_pair(end_val, segment_value));
     segment_value = ~segment_value;
   }
-  /*
-  for (auto it : segment_end_map) {
-    cout << "Segment End " << it.first << " " << it.second << endl;
-  }
-  cout << "ECALHCAL Vetoes: ";
-  for (auto it : parameters.ecalhcal_vetoes) {
-    cout << it << " ";
-  }
-  cout << endl;
-  */
 
   auto next_segment_end_point_it = parameters.segment_end_points.begin();
-  assert (next_segment_end_point_it != parameters.segment_end_points.end());
   for (int i = 0; i < num_contents_bits; ++i) {
     int ecal = i & ecal_mask;
     int hcal = (i & hcal_mask) >> parameters.cal_bits;
@@ -407,30 +397,31 @@ int main(int argc, char* argv[]) {
 
   bool make_verilog = false;
   bool make_scripts = false;
-  bool compress_memory = true;
+  bool compress_memory = false;
   bool compress_tree = false;
   bool use_concatenated = true;
+  bool make_memory_image = true;
 
   const int initial_seed = 0;
 
   const int start_num_vetoes = 0;
-  const int increment_vetoes = 500;
-  const int end_num_vetoes = 500000;
+  const int increment_vetoes = 100;
+  const int end_num_vetoes = 1000;
   const int veto_energy_min = 0;
   const int veto_energy_max = 1023;
   const int ecalhcal_min = 0;
   const int ecalhcal_max = 0x0FFFFF;  // 20 bits
 
-  const int num_segments = 2;
+  const int num_segments = 1;
   const int avg_segment_length = ecalhcal_max / num_segments;
   const int min_segment_length = ceil(0.5 * avg_segment_length);
   const int max_segment_length = 1.5 * avg_segment_length;
 
   const string xilinx_workspace = "/localhome/gregerso/tools/Xilinx/workspace";
   const string xilinx_device = "xc7a200tlffg1156-2L";
-  const string hdl_dir = "/localhome/gregerso/git/signalcontent/src/scripts/out";
-  const string script_dir = "/localhome/gregerso/git/signalcontent/src/scripts/out";
-  const string memory_compression_dir = "/localhome/gregerso/git/signalcontent/src/scripts/out";
+  const string hdl_dir = "/localhome/gregerso/git/signalcontent/src/standalone/out";
+  const string script_dir = "/localhome/gregerso/git/signalcontent/src/standalone/out";
+  const string memory_compression_dir = "/localhome/gregerso/git/signalcontent/src/standalone/out";
 
   // We continue using previous veto values, so successive sets of vetoes are
   // supersets of the previous ones.
@@ -477,26 +468,33 @@ int main(int argc, char* argv[]) {
   }
 
   vector<Parameters> segment_parameter_sets;
-  for (int segment = 1; segment < num_segments; ++segment) {
+  cout << "Generating segments\n";
+  if (1 >= num_segments) {
     Parameters parameters;
-    if (!segment_parameter_sets.empty()) {
-      parameters = segment_parameter_sets.back();
-    }
-    int last_end_point = 0;
-    while (parameters.segment_end_points.size() < segment &&
-           last_end_point < ecalhcal_max) {
-      int new_end_point = last_end_point + segment_distribution(generator);
-      if (new_end_point < ecalhcal_max) {
-        parameters.segment_end_points.insert(new_end_point);
-      }
-      last_end_point = new_end_point;
-    }
     segment_parameter_sets.push_back(parameters);
+  } else {
+    for (size_t segment = 1; segment < num_segments; ++segment) {
+      Parameters parameters;
+      if (!segment_parameter_sets.empty()) {
+        parameters = segment_parameter_sets.back();
+      }
+      int last_end_point = 0;
+      while (parameters.segment_end_points.size() < segment &&
+            last_end_point < ecalhcal_max) {
+        int new_end_point = last_end_point + segment_distribution(generator);
+        if (new_end_point < ecalhcal_max) {
+          parameters.segment_end_points.insert(new_end_point);
+        }
+        last_end_point = new_end_point;
+      }
+      segment_parameter_sets.push_back(parameters);
+    }
   }
 
   vector<Parameters> parameter_sets;
+  cout << "Generating parameter sets\n";
   for (Parameters parameters : segment_parameter_sets) {
-    for (int num_vetoes = start_num_vetoes; num_vetoes < end_num_vetoes;
+    for (size_t num_vetoes = start_num_vetoes; num_vetoes <= end_num_vetoes;
         num_vetoes += increment_vetoes) {
       if (!parameter_sets.empty() &&
           (parameter_sets.back().ecal_vetoes.size() +
@@ -522,7 +520,9 @@ int main(int argc, char* argv[]) {
       parameter_sets.push_back(parameters);
     }
   }
+  cout << "Generated " << parameter_sets.size() << " sets\n";
 
+  cout << "Generating output files\n";
   for (Parameters parameters : parameter_sets) {
     stringstream ss;
     int num_vetoes = parameters.ecal_vetoes.size() +
@@ -547,6 +547,41 @@ int main(int argc, char* argv[]) {
       cout << "Compressing " << num_segments << "_" << num_vetoes << endl;
       QueueFv memory = get_memory_image(parameters);
       compress_memory_tree(tree_compression_file, memory, parameters);
+    }
+    if (make_memory_image) {
+      const string file_name = memory_compression_dir + "/memory_image" +
+          ss.str() + ".txt";
+      const string file_name_init = memory_compression_dir + "/memory_image" +
+          ss.str() + "_init.txt";
+      cout << "Making memory image " << file_name << endl;
+      QueueFv memory = get_memory_image(parameters);
+      ofstream ofile(file_name);
+      ofstream ofile_init(file_name_init);
+      assert(ofile.is_open());
+      assert(ofile_init.is_open());
+      int count = 0;
+      while (!memory.empty()) {
+        int hex_val = 0;
+        if (count % (1024 * 512) == 0) {
+          if (count != 0) {
+            ofile_init << endl;
+          }
+          ofile_init << std::dec << (1024*512) << "'h";
+        }
+        for (int i = 0; i < 4; ++i) {
+          FourValueLogic bit = memory.front();
+          memory.pop();
+          ofile << (FourValueLogic::ONE == bit ? '1' : '0');
+          if (FourValueLogic::ONE == bit) {
+            hex_val |= (1 << i);
+          }
+        }
+        count += 4;
+        assert(hex_val <= 0xf);
+        ofile_init << std::hex << (int)hex_val;
+      }
+      ofile.close();
+      ofile_init.close();
     }
   }
 

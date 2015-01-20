@@ -2,7 +2,7 @@
 #ifndef DLSC_STEREOBM_MODELS_INCLUDED
 #define DLSC_STEREOBM_MODELS_INCLUDED
 
-#include <opencv/cv.h>
+#include <opencv2/opencv.hpp>
 
 struct dlsc_stereobm_params {
     // for dlsc_xsobel

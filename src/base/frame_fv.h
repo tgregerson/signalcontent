@@ -140,7 +140,7 @@ inline QueueFv ConvertFromFrameDeque(VFrameDeque&& fd) {
   QueueFv q;
   while (!fd.empty()) {
     VFrameFv& frame = fd.front();
-    for (int bit = 0; bit < frame.size(); ++bit) {
+    for (size_t bit = 0; bit < frame.size(); ++bit) {
       q.push(frame.at(bit));
     }
     fd.pop_front();
