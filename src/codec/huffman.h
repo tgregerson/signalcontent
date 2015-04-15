@@ -25,13 +25,14 @@ struct HuffmanNode;
 
 class HuffmanCodec {
  public:
-  HuffmanCodec(const base::VFrameDeque& frame_deque,
-               size_t frame_size,
-               size_t symbol_bits);
+  HuffmanCodec(const base::VFrameDeque& frame_deque, size_t symbol_bits);
   ~HuffmanCodec();
 
-  std::vector<bool> Encode(const base::VFrameDeque& bits);
+  std::vector<bool> Encode(const base::VFrameDeque& frames);
+  std::vector<bool> EncodeFrame(const base::VFrameFv& frame);
   std::vector<int> Decode(const std::vector<bool>& bits);
+  void PrintCodeTable() const;
+  void PrintCompressionData() const;
 
  private:
   // Represent a series of four-value bits as a multi-bit symbol.
@@ -49,6 +50,7 @@ class HuffmanCodec {
   size_t frame_size_;
   size_t symbol_bits_;
   std::unordered_map<int, std::vector<bool>> symbol_to_codeword_;
+  std::unordered_map<int, size_t> symbol_to_freq_;
   HuffmanNode* code_tree_root_{nullptr};
 };
 

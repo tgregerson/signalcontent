@@ -20,21 +20,21 @@ using base::VFrameFv;
 namespace codec {
 
 HuffmanCodec::HuffmanCodec(
-    const VFrameDeque& frame_deque, size_t frame_size,
-    size_t symbol_bits) : frame_size_(frame_size), symbol_bits_(symbol_bits) {
+    const VFrameDeque& frame_deque, size_t symbol_bits)
+    : symbol_bits_(symbol_bits) {
+  frame_size_ = frame_deque.front().size();
   if (symbol_bits > 32) {
     throw runtime_error("Symbol size cannot exceed 32 bits.");
   }
 
   // Build frequency table.
-  unordered_map<int, size_t> symbol_to_freq;
   for (size_t frame_num = 0; frame_num < frame_deque.size(); ++frame_num) {
     const VFrameFv& frame = frame_deque.at(frame_num);
     vector<int> symbols = FrameToSymbols(frame);
     for (int symbol : symbols) {
-      auto it = symbol_to_freq.find(symbol);
-      if (it == symbol_to_freq.end()) {
-        symbol_to_freq.insert(std::make_pair(symbol, 1));
+      auto it = symbol_to_freq_.find(symbol);
+      if (it == symbol_to_freq_.end()) {
+        symbol_to_freq_.insert(std::make_pair(symbol, 1));
       } else {
         it->second = it->second + 1;
       }
@@ -45,7 +45,7 @@ HuffmanCodec::HuffmanCodec(
   // tree from the bottom up.
   std::priority_queue<HuffmanNode*, std::vector<HuffmanNode*>,
                       HuffmanNodePointerGreater> freq_sorted_nodes;
-  for (std::pair<int, size_t> p : symbol_to_freq) {
+  for (std::pair<int, size_t> p : symbol_to_freq_) {
     // Add all symbols as leaf nodes.
     freq_sorted_nodes.push(
         new HuffmanNode(true, p.second, p.first, nullptr, nullptr, nullptr));
@@ -92,6 +92,18 @@ vector<bool> HuffmanCodec::Encode(const VFrameDeque& frame_deque) {
       const vector<bool>& codeword = symbol_to_codeword_.at(symbol);
       encoded.insert(encoded.end(), codeword.begin(), codeword.end());
     }
+  }
+  return encoded;
+}
+
+vector<bool> HuffmanCodec::EncodeFrame(const VFrameFv& frame) {
+  vector<bool> encoded;
+  CHECK_EQ(frame_size_, frame.size()) << "Frame size mismatch: "
+                                      << frame.size() << " " << frame_size_;
+  vector<int> symbols = FrameToSymbols(frame);
+  for (int symbol : symbols) {
+    const vector<bool>& codeword = symbol_to_codeword_.at(symbol);
+    encoded.insert(encoded.end(), codeword.begin(), codeword.end());
   }
   return encoded;
 }
@@ -149,6 +161,42 @@ void HuffmanCodec::BuildCodeTableRecursive(
     BuildCodeTableRecursive(node->right, code, table);
     code->pop_back();
   }
+}
+
+void HuffmanCodec::PrintCodeTable() const {
+  cout << "Symbol Frequencies:\n";
+  for (const auto&p : symbol_to_freq_) {
+    cout << p.first << " " << p.second << endl;
+  }
+  cout << endl;
+  cout << "Huffman Code Table\n";
+  for (const auto& p : symbol_to_codeword_) {
+    cout << p.first << " ";
+    for (bool b : p.second) {
+      if (b) {
+        cout << "1";
+      } else {
+        cout << "0";
+      }
+    }
+    cout << endl;
+  }
+}
+
+void HuffmanCodec::PrintCompressionData() const {
+  unsigned long long orig_size = 0;
+  for (const auto& p : symbol_to_freq_) {
+    orig_size += p.second;
+  }
+  orig_size *= symbol_bits_;
+  unsigned long long compressed_size = 0;
+  for (const auto& p : symbol_to_freq_) {
+    compressed_size += (p.second * symbol_to_codeword_.at(p.first).size());
+  }
+  double compression_ratio = double(compressed_size) / orig_size;
+  cout << "Original bits: " << orig_size << endl;
+  cout << "Compressed bits: " << compressed_size << endl;
+  cout << "Ratio: " << compression_ratio << endl;
 }
 
 }  // namespace codec

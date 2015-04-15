@@ -32,7 +32,10 @@
 #define CONTEXT_AS_STREAM_ARG __FILE__ << ":" << __LINE__ << ":" << __PRETTY_FUNCTION__
 
 // Exits if pointer is NULL, else returns pointer.
+#ifndef CNN_INLINE
+#define CNN_INLINE
 template<typename T> inline T* CHECK_NOTNULL(T* ptr) { assert(ptr != nullptr); return ptr; }
+#endif
 
 // Macros for stream-like logging and assertions.
 #define LOG MacroLikeLogger()
@@ -60,11 +63,11 @@ template<typename T> inline T* CHECK_NOTNULL(T* ptr) { assert(ptr != nullptr); r
 #if ENV_DEBUG_ENABLED
 #define DCHECK(expr) CHECK(expr)
 #define DCHECK_EQ(a, b) CHECK_EQ(a, b)
-#define DLOG(lev) MacroLikeDebugLogger(lev)
+#define SC_DLOG(lev) MacroLikeDebugLogger(lev)
 #else
 #define DCHECK(expr) BlackHoleLogger()
 #define DCHECK_EQ(a, b) BlockHoleLogger()
-#define DLOG(lev) BlackHoleLogger()
+#define SC_DLOG(lev) BlackHoleLogger()
 #endif
 
 // Consumes stream arguments, but emits nothing.
